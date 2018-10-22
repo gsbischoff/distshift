@@ -209,16 +209,7 @@ CreateDistribution(void *Data, size_t DataSize, int BytesPerSample)
 
 	return(Result);
 }
-u32
-ByteSwapU32(u32 Value)
-{
-	u32 Result = ((Value >> 24) & (0xFF)) |
-	             ((Value >> 8)  & (0xFF << 8)) |
-				 ((Value << 8)  & (0xFF << 16)) |
-				 ((Value << 24) & (0xFF << 24));
 
-	return Result;
-}
 int
 main(int ArgCount, char **Args)
 {
@@ -230,31 +221,15 @@ main(int ArgCount, char **Args)
 	{
 		fread(&Header, 1, sizeof(wav_header), Input);
 
-		printf("ChunkID: %.4s\n"
-				"ChunkSize: %u\n"
-				"Format: %.4s\n"
-				"Subchunk1ID: %.4s\n"
+		printf("ChunkSize: %u\n"
 				"Subchunk1Size: %u\n"
 				"AudioFormat: %u\n"
-				"NumChannels: %u\n"
-				"SampleRate: %u\n"
-				"ByteRate: %u\n"
-				"BlockAlign: %u\n"
 				"BitsPerSample: %u\n"
-				"Subchunk2ID: %.4s\n"
 				"Subchunk2Size: %u\n",
-				(char *)&Header.ChunkID,
 				Header.ChunkSize,
-				(char *)&Header.Format,
-				(char *)&Header.Subchunk1ID,
 				Header.Subchunk1Size,
 				Header.AudioFormat,
-				Header.NumChannels,
-				Header.SampleRate,
-				Header.ByteRate,
-				Header.BlockAlign,
 				Header.BitsPerSample,
-				(char *)&Header.Subchunk2ID,
 				Header.Subchunk2Size);
 
 		void *Data = malloc(Header.Subchunk2Size);
