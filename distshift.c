@@ -88,19 +88,30 @@ DistributeValueOnInterval(double LastBlockStart,
 	return(Index + ExtraWidth);
 }
 
+size_t
+GetDistributionArea(discrete_distribution Distribution)
+{
+	// Find area of input Dist
+	size_t Result = 0;
+	for(int Index = 0;
+	    Index < Distribution.Length;
+		++Index)
+	{
+		discrete_unit Block = Distribution.Contents[Index];
+		Result += (Block.Value * Block.Width);
+	}
+
+	return(Result);
+}
+
 void
 ShiftDistribution(discrete_distribution Distribution, 
                   discrete_distribution Target)
 {
 	// Find area of input Dist and set widths to 1
-	size_t Area = 0;
-	for(int Index = 0;
-	    Index < Distribution.Length;
-		++Index)
-	{
-		Area += Distribution.Contents[Index].Value;
-		Distribution.Contents[Index].Width = 1.0;
-	}
+	size_t Area = GetDistributionArea(Distribution);
+	size_t TArea = GetDistributionArea(Target);
+	printf("Area of Dist:   %zu\nArea of Target: %zu\n", Area, TArea);
 
 	// These are offsets in the distribution where the current block -- rectagular
 	// unit of the discrete distribution -- begins and the points from which on the 
@@ -131,6 +142,32 @@ ShiftDistribution(discrete_distribution Distribution,
 }
 
 discrete_distribution
+CreateNormalDistribution(size_t Length, size_t DistributionArea)
+{
+	discrete_distribution Result = {0};
+	Result.Length = Length;
+	Result.Contents = calloc(sizeof(discrete_unit) * Length, 1);
+
+	// PDF from 0 to inf is area 0.5
+	// So values of PD must be 2 * DistributionArea times higher
+
+	// 2 * VertScale * PDF( Length / Stretch) = 0.5 
+	double Stretch = 10000.0;
+	double VerticalScale = (DistributionArea / Stretch);
+	for(int Index = 0;
+	    Index < Result.Length;
+		++Index)
+	{
+		double X = ((double)Index / Stretch);
+		Result.Contents[Index].Value = 2 * VerticalScale * PDF(X);
+		Result.Contents[Index].Width = 1.0;
+	}
+	printf("CreateNormalDistribution: PDF at endpoint is %u\n", Result.Contents[Length].Value);
+
+	return(Result);
+}
+
+discrete_distribution
 CreateDistribution(void *Data, size_t DataSize, int BytesPerSample)
 {
 	discrete_distribution Result = {0};
@@ -155,11 +192,13 @@ CreateDistribution(void *Data, size_t DataSize, int BytesPerSample)
 			{
 				int SubIndex = ((Byte[Index] > 0) ? Byte[Index] : -Byte[Index]);
 				Result.Contents[SubIndex].Value++;
+				Result.Contents[SubIndex].Width = 1.0;
 			} break;
 			case 2: 
 			{
 				int SubIndex = ((Short[Index] > 0) ? Short[Index] : -Short[Index]);
 				Result.Contents[SubIndex].Value++;
+				Result.Contents[SubIndex].Width = 1.0;
 			} break;
 
 			default: break;
@@ -224,11 +263,13 @@ main(int ArgCount, char **Args)
 		fclose(Input);
 
 		discrete_distribution Distribution = CreateDistribution(Data, Header.Subchunk2Size, Header.BitsPerSample / 8);
+		size_t DistributionArea = GetDistributionArea(Distribution);
 
 		// Make a normal distribution
-		discrete_distribution Target;
-		Target.Length = Distribution.Length;
-		Target.Contents = calloc(sizeof(discrete_unit) * Distribution.Length, 1);
+		discrete_distribution Target = CreateNormalDistribution(Distribution.Length, DistributionArea);
+		//Target.Length = Distribution.Length;
+		//Target.Contents = calloc(sizeof(discrete_unit) * Distribution.Length, 1);
+
 
 		
 
