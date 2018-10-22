@@ -245,10 +245,6 @@ main(int ArgCount, char **Args)
 		//Target.Length = Distribution.Length;
 		//Target.Contents = calloc(sizeof(discrete_unit) * Distribution.Length, 1);
 
-
-		
-
-
 		ShiftDistribution(Distribution, Target);
 
 		short *Samples = Data;
