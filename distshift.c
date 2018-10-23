@@ -3,6 +3,8 @@
 #include <math.h>
 #include <complex.h>
 
+#include <assert.h>
+
 #include "discrete_unit.h"
 #ifndef INTS
 #define INTS
@@ -168,35 +170,34 @@ CreateNormalDistribution(size_t Length, size_t DistributionArea)
 }
 
 discrete_distribution
-CreateDistribution(void *Data, size_t DataSize, int BytesPerSample)
+CreateDistribution(samples Samples)
 {
 	discrete_distribution Result = {0};
 
-	if(BytesPerSample == 3)
+	if(Samples.BytesPerSample == 3)
 		return(Result);
 
-	size_t NumValues = (1 << ((BytesPerSample * 8) - 1));
+	int BitsPerSample = (Samples.BytesPerSample * 8);
+	size_t NumValues = (1 << (BitsPerSample - 1));
 	Result.Length = NumValues;
 	Result.Contents = calloc(sizeof(discrete_unit) * NumValues, 1);
 	printf("Created distribution with %zu samples\n", NumValues);
 
-	s8 *Byte = Data;
-	s16 *Short = Data;
 	for(int Index = 0;
-	    Index < (DataSize / BytesPerSample);
+	    Index < Samples.Length;
 		++Index)
 	{
-		switch(BytesPerSample)
+		switch(Samples.BytesPerSample)
 		{
 			case 1: 
 			{
-				int SubIndex = ((Byte[Index] > 0) ? Byte[Index] : -Byte[Index]);
+				int SubIndex = ((Samples.Data8[Index] > 0) ? Samples.Data8[Index] : -Samples.Data8[Index]);
 				Result.Contents[SubIndex].Value++;
 				Result.Contents[SubIndex].Width = 1.0;
 			} break;
 			case 2: 
 			{
-				int SubIndex = ((Short[Index] > 0) ? Short[Index] : -Short[Index]);
+				int SubIndex = ((Samples.Data16[Index] > 0) ? Samples.Data16[Index] : -Samples.Data16[Index]);
 				Result.Contents[SubIndex].Value++;
 				Result.Contents[SubIndex].Width = 1.0;
 			} break;
@@ -208,6 +209,96 @@ CreateDistribution(void *Data, size_t DataSize, int BytesPerSample)
 	printf("\nFilled Result\n");
 
 	return(Result);
+}
+
+// Stores a mapping from [0, 2^7 - 1] or [0, 2^15 - 1] to new values in that range
+typedef struct
+{
+	int BytesPerSample;
+
+	union
+	{
+		s8 Map8[1 << 7];
+		s16 Map16[1 << 15];
+		// s32 Map32[1 << 31]; uh not supported
+	};
+} transfer_function;
+
+transfer_function
+CreateTransferFunction(discrete_distribution Distribution)
+{
+	//sizeof(transfer_function);
+	transfer_function Result = {0};
+
+	// MapX[x] ::= f(x) ->
+	double AccumulatedOffset = 0.0;
+	switch(Distribution.Length)
+	{
+		case (1 << 7): 
+		{
+			Result.BytesPerSample = 1;
+			for(int Index = 0;
+			    Index < (1 << 7);
+				++Index)
+			{
+				Result.Map8[Index] = Distribution.Contents[Index].Width;
+				assert(AccumulatedOffset < Distribution.Length);
+			}
+		} break;
+		case (1 << 15): 
+		{
+			Result.BytesPerSample = 2;
+			for(int Index = 0;
+			    Index < (1 << 15);
+				++Index)
+			{
+				Result.Map16[Index] = Distribution.Contents[Index].Width;
+				assert(AccumulatedOffset < Distribution.Length);
+			}
+		} break;
+		default: break;
+	}
+}
+
+void
+MapAll(samples Samples, transfer_function TransferFunction)
+{
+	if(Samples.BytesPerSample != TransferFunction.BytesPerSample)
+		return;
+
+	for(size_t Index = 0;
+	    Index < Samples.Length;
+		++Index)
+	{
+		switch(Samples.BytesPerSample)
+		{
+			case 1: 
+			{
+				s8 Sample = Samples.Data8[Index];
+				if(Sample < 0)
+				{
+					Samples.Data8[Index] = -TransferFunction.Map8[-Sample];
+				}
+				else
+				{
+					Samples.Data8[Index] = TransferFunction.Map8[Sample];
+				}
+			} break;
+			case 2: 
+			{
+				s16 Sample = Samples.Data16[Index];
+				if(Sample < 0)
+				{
+					Samples.Data16[Index] = -TransferFunction.Map16[-Sample];
+				}
+				else
+				{
+					Samples.Data16[Index] = TransferFunction.Map16[Sample];
+				}
+			} break;
+			default: break;
+		}
+	}
 }
 
 int
@@ -234,21 +325,38 @@ main(int ArgCount, char **Args)
 
 		void *Data = malloc(Header.Subchunk2Size);
 
+		samples Samples = {0};
+		Samples.BytesPerSample = (Header.BitsPerSample / 8);
+		Samples.Length = (Header.Subchunk2Size / Samples.BytesPerSample);
+
+		switch(Samples.BytesPerSample)
+		{
+			case 1: { Samples.Data8 = Data; } break;
+			case 2: { Samples.Data16 = Data; } break;
+			case 4: { Samples.Data32 = Data; } break;
+
+			default: break;
+		}
+
 		fread(Data, 1, Header.Subchunk2Size, Input);
 		fclose(Input);
 
-		discrete_distribution Distribution = CreateDistribution(Data, Header.Subchunk2Size, Header.BitsPerSample / 8);
+		discrete_distribution Distribution = CreateDistribution(Samples);
 		size_t DistributionArea = GetDistributionArea(Distribution);
 
 		// Make a normal distribution
 		discrete_distribution Target = CreateNormalDistribution(Distribution.Length, DistributionArea);
-		//Target.Length = Distribution.Length;
-		//Target.Contents = calloc(sizeof(discrete_unit) * Distribution.Length, 1);
 
+		// Shift!
 		ShiftDistribution(Distribution, Target);
 
+		// Integrate!
+		transfer_function TransferFunction = CreateTransferFunction(Distribution);
 
-		short *Samples = Data;
+		// Apply the function
+		MapAll(Samples, TransferFunction);
+
+
 		free(Distribution.Contents);
 
 	}
