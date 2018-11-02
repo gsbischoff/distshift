@@ -83,8 +83,9 @@ CreateTransferFunction(discrete_distribution Distribution)
 }
 
 void
-MapAll(samples Samples, transfer_function TransferFunction)
+MapAllWithDither(samples Samples, transfer_function TransferFunction)
 {
+    // Todo: dither [TPDF, +/- 0.5 LSB]
 	if(Samples.BytesPerSample != TransferFunction.BytesPerSample)
 		return;
 
@@ -174,12 +175,12 @@ main(int ArgCount, char **Args)
     size_t DistributionArea = GetDistributionArea(Distribution);
 
     // Make a target distribution -- default is normal
-    discrete_distribution TargetDistribution = {0};
+    discrete_distribution TargetDistribution;
 
     if(TargetSamples.Data)
-        CreateDistribution(TargetSamples);
+        TargetDistribution = CreateDistribution(TargetSamples);
     else
-        CreateNormalDistribution(Distribution.Length, DistributionArea);
+        TargetDistribution = CreateNormalDistribution(Distribution.Length, DistributionArea);
 
     // Shift!
     ShiftDistribution(Distribution, TargetDistribution);
@@ -188,7 +189,7 @@ main(int ArgCount, char **Args)
     transfer_function TransferFunction = CreateTransferFunction(Distribution);
 
     // Apply the function
-    MapAll(Samples, TransferFunction);
+    MapAllWithDither(Samples, TransferFunction);
 
     free(Distribution.Contents);
     free(TargetDistribution.Contents);
