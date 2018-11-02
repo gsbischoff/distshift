@@ -34,6 +34,8 @@ typedef struct
 
 	union
 	{
+        void *Data;
+        
 		s8 *Data8;
 		s16 *Data16;
 		s32 *Data32;
