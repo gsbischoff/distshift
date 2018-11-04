@@ -74,7 +74,7 @@ CreateTransferFunction(discrete_distribution Distribution)
 
                 AccumulatedOffset += Distribution.Contents[Index].Width;
 
-				assert(AccumulatedOffset < Distribution.Length);
+				if(AccumulatedOffset >= Distribution.Length) break;
 			}
 		} break;
 		case (1 << 15): 
@@ -89,7 +89,7 @@ CreateTransferFunction(discrete_distribution Distribution)
 
                 AccumulatedOffset += Distribution.Contents[Index].Width;
 
-				assert(AccumulatedOffset < Distribution.Length);
+				if(AccumulatedOffset >= Distribution.Length) break;
 			}
 		} break;
 		default: break;
@@ -151,12 +151,12 @@ MapAllWithDither(samples Samples, transfer_function *TransferFunction)
         float RandomValueOnInterval = ((RandomValue / (float)RAND_MAX) * (Value.b - Value.a)) + Value.a;
 
         // Dither w/ TPDF noise of 2 LSB peak-to-peak [Vanderkooy, Lipshitz]
-        // Triangular on [0, 65 536], mean at 32 767
-        float TPDF = (((float)rand() / (float)RAND_MAX) +
-                        ((float)rand() / (float)RAND_MAX));
+        // Triangular on [0, 65 536], mean at 32 767, div by rand max to get [0,2]
+        float TPDF = (((float)rand() + 
+                       (float)rand()) / (float)RAND_MAX);
 
-        // Now, scale to [-1, 1], or 2 LSB peak-to-peak
-        float Dither = ((TPDF - 32768.f) / 32768.f);
+        // Now,  to [-1, 1], or 2 LSB peak-to-peak
+        float Dither = (TPDF - 1.f);
 
         // Add the dither, requantize
         float DitheredSample = (RandomValueOnInterval + Dither);
@@ -217,6 +217,20 @@ main(int ArgCount, char **Args)
 
     samples Samples = WaveRead(Args[1]);
     samples TargetSamples = WaveRead(Args[2]);
+
+#if 0
+    {
+        s16 One[] = { 1 , 2, 3 , 3 };
+        s16 Tar[] = { 1 , 2, 3 , 4 };
+        Samples.BytesPerSample = 2;
+        Samples.Data16 = One;
+        Samples.Length = 4;
+
+        TargetSamples.BytesPerSample = 2;
+        TargetSamples.Data16 = Tar;
+        TargetSamples.Length = 4;
+    }
+#endif
 
     discrete_distribution Distribution = CreateDistribution(Samples);
     size_t DistributionArea = GetDistributionArea(Distribution);
