@@ -31,48 +31,64 @@ typedef struct
 	u32 Subchunk2Size;
 } wav_header;
 
+typedef struct
+{
+    float a;
+    float b;
+} interval;
+
 // Stores a mapping from [0, 2^7 - 1] or [0, 2^15 - 1] to new values in that range
+// Used to map to s8's and s16's, but the operation _actually_ maps into intervals
+//  is a big honking struct, thankfully we only need to make one of them
 typedef struct
 {
 	int BytesPerSample;
 
 	union
 	{
-		s8 Map8[1 << 7];
-		s16 Map16[1 << 15];
+		interval Map8[1 << 7];
+		interval Map16[1 << 15];
 		// s32 Map32[1 << 31]; uh not supported
 	};
 } transfer_function;
 
-transfer_function
+transfer_function *
 CreateTransferFunction(discrete_distribution Distribution)
 {
 	//sizeof(transfer_function);
-	transfer_function Result = {0};
+	transfer_function *Result = calloc(1, sizeof(transfer_function));
 
-	// MapX[x] ::= f(x) ->
+	// Map[x] ::= f(x) -> [Lo, Hi] -- maps a single scalar onto an interval (returns an interval)
 	double AccumulatedOffset = 0.0;
 	switch(Distribution.Length)
 	{
 		case (1 << 7): 
 		{
-			Result.BytesPerSample = 1;
+			Result->BytesPerSample = 1;
 			for(int Index = 0;
 			    Index < (1 << 7);
 				++Index)
 			{
-				Result.Map8[Index] = Distribution.Contents[Index].Width;
+                Result->Map8[Index].a = AccumulatedOffset;
+                Result->Map8[Index].b = AccumulatedOffset + Distribution.Contents[Index].Width;
+
+                AccumulatedOffset += Distribution.Contents[Index].Width;
+
 				assert(AccumulatedOffset < Distribution.Length);
 			}
 		} break;
 		case (1 << 15): 
 		{
-			Result.BytesPerSample = 2;
+			Result->BytesPerSample = 2;
 			for(int Index = 0;
 			    Index < (1 << 15);
 				++Index)
 			{
-				Result.Map16[Index] = Distribution.Contents[Index].Width;
+				Result->Map16[Index].a = AccumulatedOffset;
+                Result->Map16[Index].b = AccumulatedOffset + Distribution.Contents[Index].Width;
+
+                AccumulatedOffset += Distribution.Contents[Index].Width;
+
 				assert(AccumulatedOffset < Distribution.Length);
 			}
 		} break;
@@ -83,16 +99,20 @@ CreateTransferFunction(discrete_distribution Distribution)
 }
 
 void
-MapAllWithDither(samples Samples, transfer_function TransferFunction)
+MapAllWithDither(samples Samples, transfer_function *TransferFunction)
 {
     // Todo: dither [TPDF, +/- 0.5 LSB]
-	if(Samples.BytesPerSample != TransferFunction.BytesPerSample)
+    //  With dither: Map[X] -> [a,b] -> UniformRandomValue(a,b) -> f32 -> TPDFDither(f32)
+	if(Samples.BytesPerSample > 3)
 		return;
 
+    // Map[X]
+    srand(1);
 	for(size_t Index = 0;
 	    Index < Samples.Length;
 	    ++Index)
 	{
+        interval Value;
 		switch(Samples.BytesPerSample)
 		{
 			case 1: 
@@ -100,27 +120,54 @@ MapAllWithDither(samples Samples, transfer_function TransferFunction)
 				s8 Sample = Samples.Data8[Index];
 				if(Sample < 0)
 				{
-					Samples.Data8[Index] = -TransferFunction.Map8[-Sample];
+					Value = TransferFunction->Map8[-Sample];
+                    Value.a = -Value.a;
+                    Value.b = -Value.b;
 				}
 				else
 				{
-					Samples.Data8[Index] = TransferFunction.Map8[Sample];
+					Value = TransferFunction->Map8[Sample];
 				}
 			} break;
 			case 2: 
 			{
-				s16 Sample = Samples.Data16[Index];
+                s16 Sample = Samples.Data16[Index];
 				if(Sample < 0)
 				{
-					Samples.Data16[Index] = -TransferFunction.Map16[-Sample];
+					Value = TransferFunction->Map16[-Sample];
+                    Value.a = -Value.a;
+                    Value.b = -Value.b;
 				}
 				else
 				{
-					Samples.Data16[Index] = TransferFunction.Map16[Sample];
+					Value = TransferFunction->Map16[Sample];
 				}
 			} break;
 			default: break;
 		}
+
+        // Uniformly choose a value on that interval
+        float RandomValue = rand();
+        float RandomValueOnInterval = ((RandomValue / (float)RAND_MAX) * (Value.b - Value.a)) + Value.a;
+
+        // Dither w/ TPDF noise of 2 LSB peak-to-peak [Vanderkooy, Lipshitz]
+        // Triangular on [0, 65 536], mean at 32 767
+        float TPDF = (((float)rand() / (float)RAND_MAX) +
+                        ((float)rand() / (float)RAND_MAX));
+
+        // Now, scale to [-1, 1], or 2 LSB peak-to-peak
+        float Dither = ((TPDF - 32768.f) / 32768.f);
+
+        // Add the dither, requantize
+        float DitheredSample = (RandomValueOnInterval + Dither);
+
+        switch(Samples.BytesPerSample)
+		{
+			case 1: { Samples.Data8[Index]  = (s8) DitheredSample; } break;
+            case 2: { Samples.Data16[Index] = (s16) DitheredSample; } break;
+            case 3: { Samples.Data24[Index].LU0 = (s16) DitheredSample; } break;
+            default: break;
+        }
 	}
 }
 
@@ -186,7 +233,7 @@ main(int ArgCount, char **Args)
     ShiftDistribution(Distribution, TargetDistribution);
 
     // Integrate!
-    transfer_function TransferFunction = CreateTransferFunction(Distribution);
+    transfer_function *TransferFunction = CreateTransferFunction(Distribution);
 
     // Apply the function
     MapAllWithDither(Samples, TransferFunction);
@@ -196,4 +243,6 @@ main(int ArgCount, char **Args)
 
     free(Samples.Data);
     free(TargetSamples.Data);
+
+    free(TransferFunction);
 }
