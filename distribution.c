@@ -136,11 +136,14 @@ CreateDistribution(samples Samples)
 {
 	discrete_distribution Result = {0};
 
-	if(Samples.BytesPerSample == 3)
+	if(Samples.BytesPerSample == 4)
 		return(Result);
 
 	int BitsPerSample = (Samples.BytesPerSample * 8);
 	size_t NumValues = (1 << (BitsPerSample - 1));
+
+    if(BitsPerSample == 24) NumValues = (1 << 15); // Truncate to 16
+
 	Result.Length = NumValues;
 	Result.Contents = calloc(sizeof(discrete_unit) * NumValues, 1);
 	printf("Created distribution with %zu samples\n", NumValues);
@@ -160,6 +163,22 @@ CreateDistribution(samples Samples)
 			case 2: 
 			{
 				int SubIndex = ((Samples.Data16[Index] > 0) ? Samples.Data16[Index] : -Samples.Data16[Index]);
+				Result.Contents[SubIndex].Value++;
+				Result.Contents[SubIndex].Width = 1.0;
+			} break;
+            case 3: 
+			{
+                // Truncate to 16 bits for 24 bit data
+                s16 Value = Samples.Data24[Index].LU0;
+				int SubIndex = ((Value > 0) ? Value : -Value);
+				Result.Contents[SubIndex].Value++;
+				Result.Contents[SubIndex].Width = 1.0;
+			} break;
+            case 4: 
+			{
+                // Truncate to 16 bits for 24 bit data
+                s16 Value = (Samples.Data32[Index] / (1 << 16));
+				int SubIndex = ((Value > 0) ? Value : -Value);
 				Result.Contents[SubIndex].Value++;
 				Result.Contents[SubIndex].Width = 1.0;
 			} break;
