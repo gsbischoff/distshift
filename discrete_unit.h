@@ -4,6 +4,7 @@
 
 typedef uint32_t u32;
 typedef uint16_t u16;
+typedef uint8_t u8;
 typedef int32_t s32;
 typedef int16_t s16;
 typedef int8_t s8;
@@ -27,6 +28,17 @@ typedef struct
 	discrete_unit *Contents;
 } discrete_distribution;
 
+typedef union
+{
+    struct
+    {
+        u8 U0;
+        u8 U1;
+        u8 U2;
+    };
+    s16 LU0;
+} s24;
+
 typedef struct
 {
 	int BytesPerSample;
@@ -36,8 +48,9 @@ typedef struct
 	{
         void *Data;
         
-		s8 *Data8;
+		s8  *Data8;
 		s16 *Data16;
+        s24 *Data24;
 		s32 *Data32;
 	};
 } samples;
