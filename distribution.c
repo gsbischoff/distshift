@@ -52,11 +52,11 @@ DistributeValueOnInterval(double LastBlockStart,
 	return(Index + ExtraWidth);
 }
 
-size_t
+double
 GetDistributionArea(discrete_distribution Distribution)
 {
 	// Find area of input Dist
-	size_t Result = 0;
+	double Result = 0;
 	for(int Index = 0;
 	    Index < Distribution.Length;
 		++Index)
@@ -73,9 +73,17 @@ ShiftDistribution(discrete_distribution Distribution,
                   discrete_distribution Target)
 {
 	// Find area of input Dist and set widths to 1
-	size_t Area = GetDistributionArea(Distribution);
-	size_t TArea = GetDistributionArea(Target);
-	printf("Area of Dist:   %zu\nArea of Target: %zu\n", Area, TArea);
+	double Area = GetDistributionArea(Distribution);
+	double TargetArea = GetDistributionArea(Target);
+
+    double ScaleValue = (Area / TargetArea);
+    for(int Index = 0;
+	    Index < Target.Length;
+		++Index)
+	{
+		Target.Contents[Index].Value *= ScaleValue;
+	}
+	printf("Area of Dist:   %f\nArea of Target: %f\n", Area, TargetArea);
 
 	// These are offsets in the distribution where the current block -- rectagular
 	// unit of the discrete distribution -- begins and the points from which on the 
@@ -126,7 +134,7 @@ CreateNormalDistribution(size_t Length, size_t DistributionArea)
 		Result.Contents[Index].Value = 2 * VerticalScale * PDF(X);
 		Result.Contents[Index].Width = 1.0;
 	}
-	printf("CreateNormalDistribution: PDF at endpoint is %u\n", Result.Contents[Length].Value);
+	printf("CreateNormalDistribution: PDF at endpoint is %f\n", Result.Contents[Length].Value);
 
 	return(Result);
 }

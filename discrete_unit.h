@@ -10,16 +10,33 @@ typedef int16_t s16;
 typedef int8_t s8;
 #endif
 
+typedef struct
+{
+	u32 ChunkID;
+	u32 ChunkSize;
+	u32 Format;
+
+	u32 Subchunk1ID;
+	u32 Subchunk1Size;
+	u16 AudioFormat;
+	u16 NumChannels;
+	u32 SampleRate;
+	u32 ByteRate;
+	u16 BlockAlign;
+	u16 BitsPerSample;
+
+	//u32 ExtraParamSize;
+	//u32 ExtraParams;
+
+	u32 Subchunk2ID;
+	u32 Subchunk2Size;
+} wav_header;
+
 // To do: change to fixed point
 typedef struct 
 {
-#if 1
-	unsigned int Value;
+	double Value;
 	double Width;
-#elif
-	u64 Value;
-	u64 Width;
-#endif
 } discrete_unit;
 
 typedef struct
@@ -53,4 +70,6 @@ typedef struct
         s24 *Data24;
 		s32 *Data32;
 	};
+
+    wav_header Header;
 } samples;

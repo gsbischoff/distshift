@@ -9,27 +9,7 @@ typedef int16_t s16;
 typedef int8_t s8;
 #endif
 
-typedef struct
-{
-	u32 ChunkID;
-	u32 ChunkSize;
-	u32 Format;
 
-	u32 Subchunk1ID;
-	u32 Subchunk1Size;
-	u16 AudioFormat;
-	u16 NumChannels;
-	u32 SampleRate;
-	u32 ByteRate;
-	u16 BlockAlign;
-	u16 BitsPerSample;
-
-	//u32 ExtraParamSize;
-	//u32 ExtraParams;
-
-	u32 Subchunk2ID;
-	u32 Subchunk2Size;
-} wav_header;
 
 typedef struct
 {
@@ -205,8 +185,37 @@ WaveRead(char *Filename)
     Samples.BytesPerSample = (Header.BitsPerSample / 8);
     Samples.Length = (Header.Subchunk2Size / Samples.BytesPerSample);
     Samples.Data = Data;
+    Samples.Header = Header;
 
     return(Samples);
+}
+
+void
+WaveWrite(samples Samples, char *Filename)
+{
+    if(!Filename)
+        return;
+
+    FILE *Output = fopen(Filename, "wb");
+
+    if(!Output)
+        return;
+
+    fwrite(&Samples.Header, sizeof(wav_header), 1, Output);
+
+    printf("ChunkSize: %u\n"
+            "Subchunk1Size: %u\n"
+            "AudioFormat: %u\n"
+            "BitsPerSample: %u\n"
+            "Subchunk2Size: %u\n",
+            Samples.Header.ChunkSize,
+            Samples.Header.Subchunk1Size,
+            Samples.Header.AudioFormat,
+            Samples.Header.BitsPerSample,
+            Samples.Header.Subchunk2Size);
+
+    fwrite(Samples.Data, 1, Samples.Length * Samples.BytesPerSample, Output);
+    fclose(Output);
 }
 
 int
@@ -251,6 +260,9 @@ main(int ArgCount, char **Args)
 
     // Apply the function
     MapAllWithDither(Samples, TransferFunction);
+
+    // Save them out to a file
+    WaveWrite(Samples, "output.wav");
 
     free(Distribution.Contents);
     free(TargetDistribution.Contents);
